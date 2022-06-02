@@ -1,0 +1,17 @@
+#!/usr/bin/with-contenv bash
+
+# Dante v1.4.3.  Copyright (c) 1997 - 2021, Inferno Nettverk A/S, Norway.
+# usage: sockd [-DLNVdfhnv]
+#    -D             : run in daemon mode
+#    -L             : shows the license for this program
+#    -N <number>    : fork of <number> servers [1]
+#    -V             : verify configuration and exit
+#    -d <number>    : set degree of debugging
+#    -f <filename>  : use <filename> as configuration file [/etc/sockd.conf]
+#    -h             : print this information
+#    -n             : disable TCP keep-alive
+#    -p <filename>  : write pid to <filename> [/var/run/sockd.pid]
+#    -v             : print version info
+
+echo "Starting danted"
+exec /usr/sbin/sockd

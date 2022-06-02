@@ -34,14 +34,15 @@ if [[ -z ${PUBLIC_KEY} || -z ${END_POINT} ]]; then
 	msg "Finding the best server..."
 	read -r recommendations < <(curl --retry 3 -LsS "https://api.nordvpn.com/v1/servers?&limit=99999&filters\[servers_technologies\]\[identifier\]=wireguard_udp&${QUERY}")
 
+	# P2P group.id == 15
 	if (( isCA )); then
 		# Vancouver
-		read -r server < <(jq -c '[.[] | select(.locations[].country.city.name=="Vancouver")] | sort_by(.load) | first' <<< "${recommendations}")
+		read -r server < <(jq -c 'map(select(.locations[].country.city.name=="Vancouver")) | map(select(.groups[].id==15)) | sort_by(.load) | first' <<< "${recommendations}")
 	elif (( isUS )); then
 		# Los Angeles
 		# San Francisco
 		#TODO: Allow 'City(s)' to be passed via envariable
-		read -r server < <(jq -c 'map(select(any(.locations[].country.city; .name == "Los Angeles" or .name == "San Francisco"))) | sort_by(.load) | first' <<< "${recommendations}" )
+		read -r server < <(jq -c 'map(select(any(.locations[].country.city; .name == "Los Angeles" or .name == "San Francisco"))) | map(select(.groups[].id==15)) | sort_by(.load) | first' <<< "${recommendations}" )
 	else
 		#TT: Should never get here
 		msg '[1]Invalid Country.  Allowed: <Canada | United_States>'

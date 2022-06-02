@@ -1,20 +1,71 @@
 #!/usr/bin/with-contenv bash
 
+readonly TS=$(date -Iseconds)
+msg() {
+	echo "[${TS}] $*"
+}
+
+declare -A country_id=(
+	['CA']=38
+	['Canada']=38
+	['US']=228
+	['United_States']=228
+)
+
+if [[ -z "${COUNTRY}" ]]; then
+	msg 'COUNTRY envariable has not been specified'
+	sleep infinity
+fi
+
+declare -i isCA=0
+declare -i isUS=0
+
+case "${COUNTRY}" in
+	      Canada) isCA=1;;
+	United_States) isUS=1;;
+	           *) msg 'Invalid Country.  Allowed: <Canada | United_States>'
+	              sleep infinity
+	              ;;
+esac
+
+QUERY="filters\[country_id\]=${country_id[${COUNTRY}]}"
+
 if [[ -z ${PUBLIC_KEY} || -z ${END_POINT} ]]; then
-  echo "[$(date -Iseconds)] Finding the best server..."
-  recommendations=$(curl --retry 3 -LsS "https://api.nordvpn.com/v1/servers/recommendations?&filters\[servers_technologies\]\[identifier\]=wireguard_udp&limit=1&${QUERY}")
-  server=$(jq -r '.[0] | del(.services, .technologies)' <<< "${recommendations}")
-  if [[ -z ${server} ]]; then
-    echo "[$(date -Iseconds)] Unable to select a server ¯\_(⊙︿⊙)_/¯"
-    sleep infinity
-  fi
-  echo "[$(date -Iseconds)] Using server: ${server}"
-  if [[ -z ${PUBLIC_KEY} ]]; then
-    PUBLIC_KEY=$(jq -r '.[0].technologies[] | select( .identifier == "wireguard_udp" ) | .metadata[] | select( .name == "public_key" ) | .value' <<< "${recommendations}")
-  fi
-  if [[ -z ${END_POINT} ]]; then
-    END_POINT=$(jq -r '.[0].hostname' <<< "${recommendations}"):51820
-  fi
+	msg "Finding the best server..."
+	read -r recommendations < <(curl --retry 3 -LsS "https://api.nordvpn.com/v1/servers?&limit=99999&filters\[servers_technologies\]\[identifier\]=wireguard_udp&${QUERY}")
+
+	if (( isCA )); then
+		# Vancouver
+		read -r server < <(jq -c '[.[] | select(.locations[].country.city.name=="Vancouver")] | sort_by(.load) | first' <<< "${recommendations}")
+	elif (( isUS )); then
+		# Los Angeles
+		# San Francisco
+		#TODO: Allow 'City(s)' to be passed via envariable
+		read -r server < <(jq -c 'map(select(any(.locations[].country.city; .name == "Los Angeles" or .name == "San Francisco"))) | sort_by(.load) | first' <<< "${recommendations}" )
+	else
+		#TT: Should never get here
+		msg '[1]Invalid Country.  Allowed: <Canada | United_States>'
+		sleep infinity
+	fi
+
+	if [[ -z "${server}" || "${server}" = 'null' ]]; then
+		msg "Unable to select a server ¯\_(⊙︿⊙)_/¯ : ${server}"
+		sleep infinity
+	fi
+
+	read -r hostname < <(jq -r '.hostname' <<< "${server}")
+	msg "Using server: ${hostname}"
+
+	if [[ -z ${PUBLIC_KEY} ]]; then
+		read -r PUBLIC_KEY < <(jq -r '.technologies[] | select( .identifier == "wireguard_udp" ) | .metadata[] | select( .name == "public_key" ) | .value' <<< "${server}")
+	fi
+	if [[ -z ${END_POINT} ]]; then
+		END_POINT="${hostname}"
+		if [[ -z "${END_POINT}" ]]; then
+			msg 'Unable to determine: END_POINT'
+		fi
+		END_POINT+=":51820"
+	fi
 fi
 
 ( umask 077 && { cat >/etc/wireguard/wg0.conf <<-EOF
